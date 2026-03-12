@@ -48,6 +48,7 @@ export default function DashboardController() {
     setVoterInfo(info);
     setGeocodeResult(geo);
     setActiveLocationId(null);
+    setFlyToTarget(null);
 
     const allLocations = [
       ...info.pollingLocations,
@@ -80,6 +81,7 @@ export default function DashboardController() {
     setVoterInfo(null);
     setGeocodeResult(null);
     setActiveLocationId(null);
+    setFlyToTarget(null);
   }, []);
 
   const handleFlyTo = useCallback((locationId: string, lat: number, lng: number) => {

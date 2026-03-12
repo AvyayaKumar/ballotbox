@@ -14,3 +14,14 @@ body {
   color: white;
   font-family: var(--font-sans);
 }
+
+/* Override Mapbox popup chrome — we render our own styled content */
+.mapboxgl-popup-content {
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+.mapboxgl-popup-tip {
+  display: none !important;
+}
