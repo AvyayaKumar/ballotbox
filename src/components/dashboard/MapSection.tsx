@@ -92,8 +92,10 @@ export const MapSection: React.FC<MapSectionProps> = ({
     dropbox: true,
   });
 
-  // Re-center when a new search result arrives
+  // Re-center when a new search result arrives.
+  // Controlled viewState is the react-map-gl recommended pattern for driving the Mapbox viewport.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setViewState({
       longitude: center.lng,
       latitude: center.lat,
@@ -104,7 +106,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
     onActiveLocationChange(null);
   }, [center.lat, center.lng, onActiveLocationChange]);
 
-  // Fly to a specific location when triggered by card click
+  // Fly to a specific location when triggered by card click.
   useEffect(() => {
     if (!flyToTarget) return;
     const next = {
@@ -113,6 +115,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
       zoom: 15,
       transitionDuration: 700,
     };
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setViewState((prev) => ({ ...prev, ...next }));
   }, [flyToTarget]);
 
