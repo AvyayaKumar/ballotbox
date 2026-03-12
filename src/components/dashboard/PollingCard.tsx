@@ -8,6 +8,7 @@ import type { VotingLocation } from '@/lib/types';
 
 export interface PollingCardProps {
   location: VotingLocation;
+  onFlyTo?: () => void;
 }
 
 function parseTime(timeStr: string): Date | null {
@@ -53,7 +54,7 @@ const typeBadgeVariants: Record<VotingLocation['type'], 'default' | 'success' | 
   dropbox: 'neutral',
 };
 
-export const PollingCard: React.FC<PollingCardProps> = ({ location }) => {
+export const PollingCard: React.FC<PollingCardProps> = ({ location, onFlyTo }) => {
   const firstHours = location.hours[0];
 
   return (
@@ -113,6 +114,17 @@ export const PollingCard: React.FC<PollingCardProps> = ({ location }) => {
           <Phone className="h-4 w-4 shrink-0" aria-hidden="true" />
           {location.phone}
         </a>
+      )}
+
+      {/* View on map link */}
+      {onFlyTo && (
+        <button
+          type="button"
+          onClick={onFlyTo}
+          className="text-brand-accent text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent rounded"
+        >
+          View on map ↓
+        </button>
       )}
     </Card>
   );
