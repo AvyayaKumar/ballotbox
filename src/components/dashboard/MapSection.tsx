@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Map, { Marker, Popup } from 'react-map-gl/mapbox';
 import type { MapRef, ViewState } from 'react-map-gl/mapbox';
+import type mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { cn } from '@/lib/utils';
 import type { VotingLocation } from '@/lib/types';
@@ -27,19 +28,54 @@ const layerConfig: Record<LayerKey, { label: string; color: string; activeClass:
   dropbox: { label: 'Drop Boxes', color: '#F97316', activeClass: 'bg-orange-500 text-white' },
 };
 
-interface MarkerDotProps {
+interface MapPinProps {
   color: string;
   label: string;
+  isActive: boolean;
 }
 
-const MarkerDot: React.FC<MarkerDotProps> = ({ color, label }) => (
-  <div
-    role="img"
-    aria-label={label}
-    style={{ backgroundColor: color }}
-    className="w-4 h-4 rounded-full border-2 border-white shadow-md"
-  />
-);
+const MapPin: React.FC<MapPinProps> = ({ color, label, isActive }) => {
+  const width = isActive ? 35 : 28;
+  const height = isActive ? 45 : 36;
+  return (
+    <div style={{ position: 'relative', width, height }}>
+      {isActive && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: width * 2,
+            height: width * 2,
+            borderRadius: '50%',
+            backgroundColor: color,
+            opacity: 0.25,
+            animation: 'pulse-ring 1.5s ease-out infinite',
+          }}
+        />
+      )}
+      <svg
+        role="img"
+        aria-label={label}
+        width={width}
+        height={height}
+        viewBox="0 0 28 36"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M14 0C6.268 0 0 6.268 0 14c0 9.941 14 22 14 22S28 23.941 28 14C28 6.268 21.732 0 14 0z"
+          fill={color}
+          stroke="white"
+          strokeWidth="2"
+        />
+        <circle cx="14" cy="14" r="5" fill="white" fillOpacity="0.8" />
+      </svg>
+    </div>
+  );
+};
 
 export const MapSection: React.FC<MapSectionProps> = ({
   center,
@@ -54,6 +90,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
   const mapRef = useRef<MapRef>(null);
+  const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
   const isFlyingRef = useRef(false);
   const moveendHandlerRef = useRef<(() => void) | null>(null);
 
@@ -90,6 +127,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
+    mapInstanceRef.current = map;
     const handler = () => { isFlyingRef.current = false; };
     moveendHandlerRef.current = handler;
     map.on('moveend', handler);
@@ -98,7 +136,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
   // Cleanup moveend listener on unmount
   useEffect(() => {
     return () => {
-      const map = mapRef.current?.getMap();
+      const map = mapInstanceRef.current;
       const handler = moveendHandlerRef.current;
       if (map && handler) map.off('moveend', handler);
     };
@@ -131,61 +169,74 @@ export const MapSection: React.FC<MapSectionProps> = ({
   ];
 
   return (
-    <div className="space-y-3">
-      {/* Layer toggle buttons */}
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Toggle map layers">
-        {(Object.entries(layerConfig) as [LayerKey, typeof layerConfig[LayerKey]][]).map(
-          ([key, cfg]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => toggleLayer(key)}
-              aria-pressed={visibleLayers[key]}
-              className={cn(
-                'px-4 py-2 rounded-full text-sm font-medium transition-colors min-h-[48px] border',
-                visibleLayers[key]
-                  ? cfg.activeClass + ' border-transparent'
-                  : 'bg-brand-card text-brand-muted border-white/10 hover:border-white/30'
-              )}
-            >
-              {cfg.label}
-            </button>
-          )
-        )}
-      </div>
-
-      {/* Map container */}
-      <div className="h-96 rounded-xl overflow-hidden border border-white/10">
-        <Map
-          ref={mapRef}
-          mapboxAccessToken={token}
-          {...viewState}
-          onMove={(evt) => setViewState(evt.viewState)}
-          onLoad={handleMapLoad}
-          style={{ width: '100%', height: '100%' }}
-          mapStyle="mapbox://styles/mapbox/outdoors-v12"
-        >
-          {taggedLocations.map(({ loc, layer }) => {
-            if (!visibleLayers[layer] || loc.lat === undefined || loc.lng === undefined) {
-              return null;
-            }
-            return (
-              <Marker
-                key={loc.id}
-                longitude={loc.lng}
-                latitude={loc.lat}
-                anchor="center"
+    <>
+      <style>{`
+        @keyframes pulse-ring {
+          0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.4; }
+          100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+        }
+      `}</style>
+      <div className="space-y-3">
+        {/* Layer toggle buttons */}
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Toggle map layers">
+          {(Object.entries(layerConfig) as [LayerKey, typeof layerConfig[LayerKey]][]).map(
+            ([key, cfg]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggleLayer(key)}
+                aria-pressed={visibleLayers[key]}
+                className={cn(
+                  'px-4 py-2 rounded-full text-sm font-medium transition-colors min-h-[48px] border',
+                  visibleLayers[key]
+                    ? cfg.activeClass + ' border-transparent'
+                    : 'bg-brand-card text-brand-muted border-white/10 hover:border-white/30'
+                )}
               >
-                <MarkerDot
-                  color={layerConfig[layer].color}
-                  label={loc.name}
-                />
-              </Marker>
-            );
-          })}
-        </Map>
+                {cfg.label}
+              </button>
+            )
+          )}
+        </div>
+
+        {/* Map container */}
+        <div className="h-96 rounded-xl overflow-hidden border border-white/10">
+          <Map
+            ref={mapRef}
+            mapboxAccessToken={token}
+            {...viewState}
+            onMove={(evt) => setViewState(evt.viewState)}
+            onLoad={handleMapLoad}
+            style={{ width: '100%', height: '100%' }}
+            mapStyle="mapbox://styles/mapbox/outdoors-v12"
+          >
+            {taggedLocations.map(({ loc, layer }) => {
+              if (!visibleLayers[layer] || loc.lat === undefined || loc.lng === undefined) {
+                return null;
+              }
+              return (
+                <Marker
+                  key={loc.id}
+                  longitude={loc.lng}
+                  latitude={loc.lat}
+                  anchor="bottom"
+                  onClick={() => {
+                    onActiveLocationChange(loc.id);
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <MapPin
+                    color={layerConfig[layer].color}
+                    label={loc.name}
+                    isActive={loc.id === activeLocationId}
+                  />
+                </Marker>
+              );
+            })}
+          </Map>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
