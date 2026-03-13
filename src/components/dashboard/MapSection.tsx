@@ -77,6 +77,32 @@ const MapPin: React.FC<MapPinProps> = ({ color, label, isActive }) => {
   );
 };
 
+function parseTime(timeStr: string): Date | null {
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+  if (period === 'PM' && hours !== 12) hours += 12;
+  if (period === 'AM' && hours === 12) hours = 0;
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+}
+
+function getOpenStatus(openTime: string, closeTime: string): { label: string; variant: 'success' | 'warning' | 'neutral' } {
+  const now = new Date();
+  const open = parseTime(openTime);
+  const close = parseTime(closeTime);
+  if (!open || !close) return { label: closeTime, variant: 'neutral' };
+  if (now >= open && now < close) {
+    const diffMs = close.getTime() - now.getTime();
+    const diffMins = Math.round(diffMs / 60000);
+    if (diffMins <= 60) return { label: `Closes in ${diffMins}m`, variant: 'warning' };
+    return { label: 'Open Now', variant: 'success' };
+  }
+  return { label: `Opens ${openTime}`, variant: 'neutral' };
+}
+
 export const MapSection: React.FC<MapSectionProps> = ({
   center,
   pollingLocations,
@@ -102,6 +128,22 @@ export const MapSection: React.FC<MapSectionProps> = ({
     pitch: 0,
     padding: { top: 0, bottom: 0, left: 0, right: 0 },
   });
+
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+
+  const selectedLocation = selectedLocationId
+    ? allLocations.find((l) => l.id === selectedLocationId) ?? null
+    : null;
+
+  const badgeColors: Record<'success' | 'warning' | 'neutral', string> = {
+    success: '#22C55E',
+    warning: '#F59E0B',
+    neutral: '#6B7280',
+  };
+
+  useEffect(() => {
+    setSelectedLocationId(activeLocationId);
+  }, [activeLocationId]);
 
   // Re-center when a new search fires, but not during an active flyTo animation
   useEffect(() => {
@@ -222,6 +264,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
                   anchor="bottom"
                   onClick={() => {
                     onActiveLocationChange(loc.id);
+                    setSelectedLocationId(loc.id);
                   }}
                   style={{ cursor: 'pointer' }}
                 >
@@ -233,6 +276,100 @@ export const MapSection: React.FC<MapSectionProps> = ({
                 </Marker>
               );
             })}
+
+            {selectedLocation && selectedLocation.lat !== undefined && selectedLocation.lng !== undefined && (
+              <Popup
+                longitude={selectedLocation.lng}
+                latitude={selectedLocation.lat}
+                anchor="bottom"
+                offset={[0, -40] as [number, number]}
+                closeOnClick={false}
+                onClose={() => {
+                  setSelectedLocationId(null);
+                  onActiveLocationChange(null);
+                }}
+              >
+                <div style={{ minWidth: 220, maxWidth: 280, fontFamily: 'inherit' }}>
+                  {/* Close button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedLocationId(null);
+                      onActiveLocationChange(null);
+                    }}
+                    aria-label="Close popup"
+                    style={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: 16,
+                      lineHeight: 1,
+                      color: '#6B7280',
+                    }}
+                  >
+                    ✕
+                  </button>
+
+                  {/* Name */}
+                  <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, paddingRight: 20 }}>
+                    {selectedLocation.name}
+                  </p>
+
+                  {/* Address */}
+                  <p style={{
+                    fontSize: 12,
+                    color: '#6B7280',
+                    marginBottom: 6,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {selectedLocation.address}
+                  </p>
+
+                  {/* Hours + open/closed badge */}
+                  {selectedLocation.hours[0] ? (() => {
+                    const h = selectedLocation.hours[0];
+                    const status = getOpenStatus(h.openTime, h.closeTime);
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                        <span style={{ fontSize: 12 }}>{h.openTime} – {h.closeTime}</span>
+                        <span style={{
+                          fontSize: 11,
+                          color: 'white',
+                          backgroundColor: badgeColors[status.variant],
+                          borderRadius: 4,
+                          padding: '1px 6px',
+                        }}>
+                          {status.label}
+                        </span>
+                      </div>
+                    );
+                  })() : (
+                    <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>See official site</p>
+                  )}
+
+                  {/* Get Directions */}
+                  <a
+                    href={`https://maps.google.com/?q=${encodeURIComponent(selectedLocation.address)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-block',
+                      fontSize: 12,
+                      color: '#1D4ED8',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    Get Directions →
+                  </a>
+                </div>
+              </Popup>
+            )}
           </Map>
         </div>
       </div>
