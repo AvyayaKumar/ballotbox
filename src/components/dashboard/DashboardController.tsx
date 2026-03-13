@@ -1,11 +1,18 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import type { VoterInfo, GeocodeResult, VotingLocation } from '@/lib/types';
 import AddressInput from '@/components/dashboard/AddressInput';
 import PollingCard from '@/components/dashboard/PollingCard';
-import MapSection from '@/components/dashboard/MapSection';
 import InfoPanel from '@/components/dashboard/InfoPanel';
+import type { MapSectionProps } from '@/components/dashboard/MapSection';
+
+// Leaflet accesses the DOM at module load time — must be excluded from SSR
+const MapSection = dynamic<MapSectionProps>(
+  () => import('@/components/dashboard/MapSection').then((m) => m.MapSection),
+  { ssr: false }
+);
 
 // Geocode locations that are missing lat/lng using the server-side /api/geocode route.
 // Uses Promise.allSettled so one failure does not abort the others.
