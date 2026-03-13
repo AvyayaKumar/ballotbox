@@ -55,6 +55,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
 
   const mapRef = useRef<MapRef>(null);
   const isFlyingRef = useRef(false);
+  const moveendHandlerRef = useRef<(() => void) | null>(null);
 
   const [viewState, setViewState] = useState<ViewState>({
     longitude: center.lng,
@@ -74,7 +75,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
       latitude: center.lat,
       zoom: 13,
     }));
-  }, [center]);
+  }, [center.lat, center.lng]);
 
   useEffect(() => {
     if (!flyToTarget || !mapRef.current) return;
@@ -89,9 +90,18 @@ export const MapSection: React.FC<MapSectionProps> = ({
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
-    map.on('moveend', () => {
-      isFlyingRef.current = false;
-    });
+    const handler = () => { isFlyingRef.current = false; };
+    moveendHandlerRef.current = handler;
+    map.on('moveend', handler);
+  }, []);
+
+  // Cleanup moveend listener on unmount
+  useEffect(() => {
+    return () => {
+      const map = mapRef.current?.getMap();
+      const handler = moveendHandlerRef.current;
+      if (map && handler) map.off('moveend', handler);
+    };
   }, []);
 
   const [visibleLayers, setVisibleLayers] = useState<Record<LayerKey, boolean>>({
