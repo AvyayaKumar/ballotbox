@@ -191,30 +191,33 @@ export const MapSection: React.FC<MapSectionProps> = ({
     dropbox: true,
   });
 
-  const toggleLayer = (key: LayerKey) => {
+  const toggleLayer = useCallback((key: LayerKey) => {
     setVisibleLayers((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
+  }, []);
 
   const handlePopupClose = useCallback(() => {
     setSelectedLocationId(null);
     onActiveLocationChange(null);
   }, [onActiveLocationChange]);
 
+  const taggedLocations = useMemo(
+    () => [
+      ...pollingLocations.map((loc) => ({ loc, layer: 'polling' as LayerKey })),
+      ...earlyVoteSites.map((loc) => ({ loc, layer: 'early' as LayerKey })),
+      ...dropOffLocations.map((loc) => ({ loc, layer: 'dropbox' as LayerKey })),
+    ],
+    [pollingLocations, earlyVoteSites, dropOffLocations]
+  );
+
   if (!token) {
     return (
-      <div className="h-96 rounded-xl bg-brand-card border border-white/10 flex items-center justify-center">
+      <div className="h-[500px] rounded-xl bg-brand-card border border-white/10 flex items-center justify-center">
         <p className="text-brand-muted text-sm text-center px-6">
           Map unavailable — <code className="font-mono">NEXT_PUBLIC_MAPBOX_TOKEN</code> is not configured.
         </p>
       </div>
     );
   }
-
-  const taggedLocations: Array<{ loc: VotingLocation; layer: LayerKey }> = [
-    ...pollingLocations.map((loc) => ({ loc, layer: 'polling' as LayerKey })),
-    ...earlyVoteSites.map((loc) => ({ loc, layer: 'early' as LayerKey })),
-    ...dropOffLocations.map((loc) => ({ loc, layer: 'dropbox' as LayerKey })),
-  ];
 
   return (
     <>
@@ -224,9 +227,14 @@ export const MapSection: React.FC<MapSectionProps> = ({
           100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
         }
       `}</style>
-      <div className="space-y-3">
-        {/* Layer toggle buttons */}
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Toggle map layers">
+      {/* Map container */}
+      <div className="h-[500px] rounded-xl overflow-hidden border border-white/10 relative">
+        {/* Overlaid layer toggle buttons */}
+        <div
+          className="absolute top-3 left-3 z-10 flex gap-2"
+          role="group"
+          aria-label="Toggle map layers"
+        >
           {(Object.entries(layerConfig) as [LayerKey, typeof layerConfig[LayerKey]][]).map(
             ([key, cfg]) => (
               <button
@@ -235,21 +243,24 @@ export const MapSection: React.FC<MapSectionProps> = ({
                 onClick={() => toggleLayer(key)}
                 aria-pressed={visibleLayers[key]}
                 className={cn(
-                  'px-4 py-2 rounded-full text-sm font-medium transition-colors min-h-[48px] border',
+                  'px-2.5 py-1 text-xs font-medium rounded-full border transition-colors flex items-center gap-1.5',
                   visibleLayers[key]
                     ? cfg.activeClass + ' border-transparent'
-                    : 'bg-brand-card text-brand-muted border-white/10 hover:border-white/30'
+                    : 'bg-white/60 text-gray-700 border-gray-300 hover:bg-white/80'
                 )}
               >
+                <span
+                  aria-hidden="true"
+                  style={{ backgroundColor: cfg.color }}
+                  className="w-2 h-2 rounded-full shrink-0"
+                />
                 {cfg.label}
               </button>
             )
           )}
         </div>
 
-        {/* Map container */}
-        <div className="h-96 rounded-xl overflow-hidden border border-white/10">
-          <Map
+        <Map
             ref={mapRef}
             mapboxAccessToken={token}
             {...viewState}
@@ -371,7 +382,6 @@ export const MapSection: React.FC<MapSectionProps> = ({
               </Popup>
             )}
           </Map>
-        </div>
       </div>
     </>
   );
