@@ -124,6 +124,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
   const mapRef = useRef<MapRef>(null);
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
   const isFlyingRef = useRef(false);
+  const mapStyleLoadedRef = useRef(false);
   const moveendHandlerRef = useRef<(() => void) | null>(null);
 
   const [viewState, setViewState] = useState<ViewState>({
@@ -158,7 +159,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
   }, [center.lat, center.lng]);
 
   useEffect(() => {
-    if (!flyToTarget || !mapRef.current) return;
+    if (!flyToTarget || !mapRef.current || !mapStyleLoadedRef.current) return;
     isFlyingRef.current = true;
     mapRef.current.flyTo({
       center: [flyToTarget.lng, flyToTarget.lat],
@@ -168,6 +169,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
   }, [flyToTarget]);
 
   const handleMapLoad = useCallback(() => {
+    mapStyleLoadedRef.current = true;
     const map = mapRef.current?.getMap();
     if (!map) return;
     mapInstanceRef.current = map;
@@ -300,6 +302,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
               latitude={selectedLocation.lat}
               anchor="bottom"
               offset={[0, -40] as [number, number]}
+              closeButton={false}
               closeOnClick={false}
               onClose={handlePopupClose}
             >
