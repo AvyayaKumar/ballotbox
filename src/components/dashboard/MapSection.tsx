@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Map, { Marker, Popup } from 'react-map-gl/mapbox';
 import type { MapRef, ViewState } from 'react-map-gl/mapbox';
 import type mapboxgl from 'mapbox-gl';
@@ -26,6 +26,12 @@ const layerConfig: Record<LayerKey, { label: string; color: string; activeClass:
   polling: { label: 'Polling Places', color: '#3B82F6', activeClass: 'bg-blue-600 text-white' },
   early: { label: 'Early Voting', color: '#22C55E', activeClass: 'bg-green-600 text-white' },
   dropbox: { label: 'Drop Boxes', color: '#F97316', activeClass: 'bg-orange-500 text-white' },
+};
+
+const badgeColors: Record<'success' | 'warning' | 'neutral', string> = {
+  success: '#22C55E',
+  warning: '#F59E0B',
+  neutral: '#6B7280',
 };
 
 interface MapPinProps {
@@ -131,15 +137,10 @@ export const MapSection: React.FC<MapSectionProps> = ({
 
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
 
-  const selectedLocation = selectedLocationId
-    ? allLocations.find((l) => l.id === selectedLocationId) ?? null
-    : null;
-
-  const badgeColors: Record<'success' | 'warning' | 'neutral', string> = {
-    success: '#22C55E',
-    warning: '#F59E0B',
-    neutral: '#6B7280',
-  };
+  const selectedLocation = useMemo(
+    () => (selectedLocationId ? allLocations.find((l) => l.id === selectedLocationId) ?? null : null),
+    [selectedLocationId, allLocations]
+  );
 
   useEffect(() => {
     setSelectedLocationId(activeLocationId);
@@ -193,6 +194,11 @@ export const MapSection: React.FC<MapSectionProps> = ({
   const toggleLayer = (key: LayerKey) => {
     setVisibleLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  const handlePopupClose = useCallback(() => {
+    setSelectedLocationId(null);
+    onActiveLocationChange(null);
+  }, [onActiveLocationChange]);
 
   if (!token) {
     return (
@@ -284,19 +290,13 @@ export const MapSection: React.FC<MapSectionProps> = ({
                 anchor="bottom"
                 offset={[0, -40] as [number, number]}
                 closeOnClick={false}
-                onClose={() => {
-                  setSelectedLocationId(null);
-                  onActiveLocationChange(null);
-                }}
+                onClose={handlePopupClose}
               >
                 <div style={{ minWidth: 220, maxWidth: 280, fontFamily: 'inherit' }}>
                   {/* Close button */}
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedLocationId(null);
-                      onActiveLocationChange(null);
-                    }}
+                    onClick={handlePopupClose}
                     aria-label="Close popup"
                     style={{
                       position: 'absolute',
