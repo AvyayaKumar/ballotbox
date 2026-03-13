@@ -231,7 +231,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
       <div className="h-[500px] rounded-xl overflow-hidden border border-white/10 relative">
         {/* Overlaid layer toggle buttons */}
         <div
-          className="absolute top-3 left-3 z-10 flex gap-2"
+          className="absolute top-3 left-3 z-10 flex gap-2 backdrop-blur-sm"
           role="group"
           aria-label="Toggle map layers"
         >
@@ -246,7 +246,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
                   'px-2.5 py-1 text-xs font-medium rounded-full border transition-colors flex items-center gap-1.5',
                   visibleLayers[key]
                     ? cfg.activeClass + ' border-transparent'
-                    : 'bg-white/60 text-gray-700 border-gray-300 hover:bg-white/80'
+                    : 'bg-white/80 text-gray-800 border-gray-300 hover:bg-white'
                 )}
               >
                 <span
@@ -261,127 +261,127 @@ export const MapSection: React.FC<MapSectionProps> = ({
         </div>
 
         <Map
-            ref={mapRef}
-            mapboxAccessToken={token}
-            {...viewState}
-            onMove={(evt) => setViewState(evt.viewState)}
-            onLoad={handleMapLoad}
-            style={{ width: '100%', height: '100%' }}
-            mapStyle="mapbox://styles/mapbox/outdoors-v12"
-          >
-            {taggedLocations.map(({ loc, layer }) => {
-              if (!visibleLayers[layer] || loc.lat === undefined || loc.lng === undefined) {
-                return null;
-              }
-              return (
-                <Marker
-                  key={loc.id}
-                  longitude={loc.lng}
-                  latitude={loc.lat}
-                  anchor="bottom"
-                  onClick={() => {
-                    onActiveLocationChange(loc.id);
-                    setSelectedLocationId(loc.id);
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <MapPin
-                    color={layerConfig[layer].color}
-                    label={loc.name}
-                    isActive={loc.id === activeLocationId}
-                  />
-                </Marker>
-              );
-            })}
-
-            {selectedLocation && selectedLocation.lat !== undefined && selectedLocation.lng !== undefined && (
-              <Popup
-                longitude={selectedLocation.lng}
-                latitude={selectedLocation.lat}
+          ref={mapRef}
+          mapboxAccessToken={token}
+          {...viewState}
+          onMove={(evt) => setViewState(evt.viewState)}
+          onLoad={handleMapLoad}
+          style={{ width: '100%', height: '100%' }}
+          mapStyle="mapbox://styles/mapbox/outdoors-v12"
+        >
+          {taggedLocations.map(({ loc, layer }) => {
+            if (!visibleLayers[layer] || loc.lat === undefined || loc.lng === undefined) {
+              return null;
+            }
+            return (
+              <Marker
+                key={loc.id}
+                longitude={loc.lng}
+                latitude={loc.lat}
                 anchor="bottom"
-                offset={[0, -40] as [number, number]}
-                closeOnClick={false}
-                onClose={handlePopupClose}
+                onClick={() => {
+                  onActiveLocationChange(loc.id);
+                  setSelectedLocationId(loc.id);
+                }}
+                style={{ cursor: 'pointer' }}
               >
-                <div style={{ minWidth: 220, maxWidth: 280, fontFamily: 'inherit' }}>
-                  {/* Close button */}
-                  <button
-                    type="button"
-                    onClick={handlePopupClose}
-                    aria-label="Close popup"
-                    style={{
-                      position: 'absolute',
-                      top: 8,
-                      right: 8,
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: 16,
-                      lineHeight: 1,
-                      color: '#6B7280',
-                    }}
-                  >
-                    ✕
-                  </button>
+                <MapPin
+                  color={layerConfig[layer].color}
+                  label={loc.name}
+                  isActive={loc.id === activeLocationId}
+                />
+              </Marker>
+            );
+          })}
 
-                  {/* Name */}
-                  <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, paddingRight: 20 }}>
-                    {selectedLocation.name}
-                  </p>
-
-                  {/* Address */}
-                  <p style={{
-                    fontSize: 12,
+          {selectedLocation && selectedLocation.lat !== undefined && selectedLocation.lng !== undefined && (
+            <Popup
+              longitude={selectedLocation.lng}
+              latitude={selectedLocation.lat}
+              anchor="bottom"
+              offset={[0, -40] as [number, number]}
+              closeOnClick={false}
+              onClose={handlePopupClose}
+            >
+              <div style={{ minWidth: 220, maxWidth: 280, fontFamily: 'inherit' }}>
+                {/* Close button */}
+                <button
+                  type="button"
+                  onClick={handlePopupClose}
+                  aria-label="Close popup"
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 16,
+                    lineHeight: 1,
                     color: '#6B7280',
-                    marginBottom: 6,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {selectedLocation.address}
-                  </p>
+                  }}
+                >
+                  ✕
+                </button>
 
-                  {/* Hours + open/closed badge */}
-                  {selectedLocation.hours[0] ? (() => {
-                    const h = selectedLocation.hours[0];
-                    const status = getOpenStatus(h.openTime, h.closeTime);
-                    return (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                        <span style={{ fontSize: 12 }}>{h.openTime} – {h.closeTime}</span>
-                        <span style={{
-                          fontSize: 11,
-                          color: 'white',
-                          backgroundColor: badgeColors[status.variant],
-                          borderRadius: 4,
-                          padding: '1px 6px',
-                        }}>
-                          {status.label}
-                        </span>
-                      </div>
-                    );
-                  })() : (
-                    <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>See official site</p>
-                  )}
+                {/* Name */}
+                <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, paddingRight: 20 }}>
+                  {selectedLocation.name}
+                </p>
 
-                  {/* Get Directions */}
-                  <a
-                    href={`https://maps.google.com/?q=${encodeURIComponent(selectedLocation.address)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-block',
-                      fontSize: 12,
-                      color: '#1D4ED8',
-                      fontWeight: 600,
-                      textDecoration: 'none',
-                    }}
-                  >
-                    Get Directions →
-                  </a>
-                </div>
-              </Popup>
-            )}
-          </Map>
+                {/* Address */}
+                <p style={{
+                  fontSize: 12,
+                  color: '#6B7280',
+                  marginBottom: 6,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {selectedLocation.address}
+                </p>
+
+                {/* Hours + open/closed badge */}
+                {selectedLocation.hours[0] ? (() => {
+                  const h = selectedLocation.hours[0];
+                  const status = getOpenStatus(h.openTime, h.closeTime);
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 12 }}>{h.openTime} – {h.closeTime}</span>
+                      <span style={{
+                        fontSize: 11,
+                        color: 'white',
+                        backgroundColor: badgeColors[status.variant],
+                        borderRadius: 4,
+                        padding: '1px 6px',
+                      }}>
+                        {status.label}
+                      </span>
+                    </div>
+                  );
+                })() : (
+                  <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>See official site</p>
+                )}
+
+                {/* Get Directions */}
+                <a
+                  href={`https://maps.google.com/?q=${encodeURIComponent(selectedLocation.address)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-block',
+                    fontSize: 12,
+                    color: '#1D4ED8',
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                  }}
+                >
+                  Get Directions →
+                </a>
+              </div>
+            </Popup>
+          )}
+        </Map>
       </div>
     </>
   );
