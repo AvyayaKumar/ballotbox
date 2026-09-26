@@ -7,6 +7,9 @@ export interface GeocodeResult {
   lat: number;
   lng: number;
   formattedAddress: string;
+  state?: string;       // e.g. "TX"
+  stateName?: string;   // e.g. "Texas"
+  city?: string;
 }
 
 export interface PollingHours {
@@ -28,25 +31,41 @@ export interface VotingLocation {
   notes?: string;
 }
 
-export interface ElectionInfo {
-  id: string;
+export interface Candidate {
   name: string;
-  electionDay: string;  // e.g. "2024-11-05"
-  contests: Contest[];
+  party?: string;
 }
 
 export interface Contest {
   type: string;
   office?: string;
+  level?: string;
   referendumTitle?: string;
   referendumSubtitle?: string;
   referendumUrl?: string;
   candidates?: Candidate[];
 }
 
-export interface Candidate {
+export interface ElectionInfo {
+  id: string;
   name: string;
-  party?: string;
+  electionDay: string;
+  contests: Contest[];
+}
+
+export interface UpcomingElection {
+  id: string;
+  name: string;
+  date: string;       // "2026-03-17"
+  stateCode: string;  // "IL"
+  contests: Contest[];
+}
+
+export interface ElectionsData {
+  upcoming: UpcomingElection[];
+  ballotpediaUrl: string;
+  stateElectionUrl?: string;
+  stateName?: string;
 }
 
 export interface VoterInfo {

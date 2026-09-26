@@ -15,9 +15,9 @@ const dataSources: DataSource[] = [
       'Converts the address you enter into geographic coordinates (latitude and longitude), enabling us to find voting locations near you.',
   },
   {
-    name: 'Mapbox',
+    name: 'Leaflet and OpenStreetMap',
     description:
-      'Powers the interactive map that displays your nearby voting locations, letting you visualize distances and get directions.',
+      'Power the interactive map that displays your nearby voting locations, letting you visualize distances and get directions.',
   },
 ];
 
@@ -139,17 +139,6 @@ export default function AboutPage() {
               </a>{' '}
               directly. They are the authoritative source and can confirm your
               correct polling place and voter registration status.
-            </p>
-            <p>
-              For technical feedback about this tool — bugs, accessibility
-              issues, or general suggestions — please reach out to us at{' '}
-              <a
-                href="mailto:feedback@ballotbox.vote"
-                className="text-white underline underline-offset-2 hover:text-blue-400 transition-colors"
-              >
-                feedback@ballotbox.vote
-              </a>
-              .
             </p>
           </div>
         </div>

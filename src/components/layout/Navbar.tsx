@@ -2,13 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Menu, X } from 'lucide-react';
 import { clsx } from 'clsx';
+import { signOut, signIn } from 'next-auth/react';
+import type { Session } from 'next-auth';
 
-interface NavLink {
-  label: string;
-  href: string;
-}
+interface NavLink { label: string; href: string; }
 
 const NAV_LINKS: NavLink[] = [
   { label: 'Home', href: '/' },
@@ -18,7 +18,11 @@ const NAV_LINKS: NavLink[] = [
   { label: 'About', href: '/about' },
 ];
 
-export default function Navbar() {
+interface NavbarProps {
+  user: Session['user'] | null;
+}
+
+export default function Navbar({ user }: NavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -33,19 +37,52 @@ export default function Navbar() {
             Ballotbox
           </Link>
 
-          {/* Desktop nav links */}
-          <ul className="hidden md:flex items-center gap-6">
-            {NAV_LINKS.map(({ label, href }) => (
-              <li key={href}>
-                <Link
-                  href={href}
-                  className="text-sm text-gray-300 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 rounded px-1 py-1"
+          {/* Desktop nav links + auth */}
+          <div className="hidden md:flex items-center gap-6">
+            <ul className="flex items-center gap-6">
+              {NAV_LINKS.map(({ label, href }) => (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    className="text-sm text-gray-300 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 rounded px-1 py-1"
+                  >
+                    {label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            {user ? (
+              <div className="flex items-center gap-3">
+                {user.image ? (
+                  <Image
+                    src={user.image}
+                    alt={user.name ?? 'User avatar'}
+                    width={32}
+                    height={32}
+                    className="rounded-full"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-brand-accent flex items-center justify-center text-white text-xs font-bold">
+                    {user.name?.[0] ?? '?'}
+                  </div>
+                )}
+                <button
+                  onClick={() => signOut({ callbackUrl: '/' })}
+                  className="text-sm text-gray-400 hover:text-white transition-colors"
                 >
-                  {label}
-                </Link>
-              </li>
-            ))}
-          </ul>
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => signIn('google')}
+                className="text-sm font-medium text-white bg-brand-accent px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Sign in
+              </button>
+            )}
+          </div>
 
           {/* Mobile hamburger */}
           <button
@@ -61,12 +98,12 @@ export default function Navbar() {
               'transition-colors'
             )}
           >
-            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+            {mobileOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile dropdown menu */}
+      {/* Mobile menu */}
       {mobileOpen && (
         <div id="mobile-menu" className="md:hidden border-t border-white/10 bg-black/80 backdrop-blur-md">
           <ul className="flex flex-col px-4 py-3 gap-1">
@@ -85,6 +122,23 @@ export default function Navbar() {
                 </Link>
               </li>
             ))}
+            <li className="pt-2 border-t border-white/10 mt-1">
+              {user ? (
+                <button
+                  onClick={() => signOut({ callbackUrl: '/' })}
+                  className="text-sm text-gray-400 hover:text-white min-h-[48px] flex items-center"
+                >
+                  Sign out ({user.name})
+                </button>
+              ) : (
+                <button
+                  onClick={() => signIn('google')}
+                  className="text-sm font-medium text-white min-h-[48px] flex items-center"
+                >
+                  Sign in with Google
+                </button>
+              )}
+            </li>
           </ul>
         </div>
       )}

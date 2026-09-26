@@ -98,6 +98,40 @@ function mapLocations(rawLocations: RawLocation[] = [], type: VotingLocation['ty
   }));
 }
 
+// Fallback: when the Civic API has no data, find nearby voting-related locations
+// using the Google Places Text Search API.
+async function findNearbyVotingPlaces(address: string, apiKey: string): Promise<VotingLocation[]> {
+  const url = new URL('https://maps.googleapis.com/maps/api/place/textsearch/json');
+  url.searchParams.set('query', `polling place election office voting location near ${address}`);
+  url.searchParams.set('key', apiKey);
+
+  const res = await fetch(url.toString());
+  if (!res.ok) return [];
+
+  const data = await res.json() as {
+    status: string;
+    results: Array<{
+      place_id: string;
+      name: string;
+      formatted_address: string;
+      geometry: { location: { lat: number; lng: number } };
+    }>;
+  };
+
+  if (data.status !== 'OK' || !data.results.length) return [];
+
+  return data.results.slice(0, 5).map((place, i) => ({
+    id: `nearby-${i}`,
+    name: place.name,
+    address: place.formatted_address,
+    type: 'polling' as const,
+    hours: [{ openTime: 'See official site', closeTime: '' }],
+    services: ['Nearby Location'],
+    lat: place.geometry.location.lat,
+    lng: place.geometry.location.lng,
+  }));
+}
+
 export async function getVoterInfo(address: string): Promise<VoterInfo> {
   const apiKey = process.env.GOOGLE_CIVIC_API_KEY;
   if (!apiKey) throw new Error('Server configuration error: voter info unavailable');
@@ -109,16 +143,23 @@ export async function getVoterInfo(address: string): Promise<VoterInfo> {
   const res = await fetch(url.toString());
 
   if (res.status === 400) {
-    // Address not found or no election data
-    return { pollingLocations: [], earlyVoteSites: [], dropOffLocations: [] };
+    // No active election data — fall back to nearby voting places
+    const nearby = await findNearbyVotingPlaces(address, apiKey);
+    return { pollingLocations: nearby, earlyVoteSites: [], dropOffLocations: [] };
   }
   if (!res.ok) throw new Error(`Civic API HTTP error: ${res.status}`);
 
   const data: RawCivicApiResponse = await res.json();
 
-  const pollingLocations = mapLocations(data.pollingLocations, 'polling');
-  const earlyVoteSites = mapLocations(data.earlyVoteSites, 'early');
-  const dropOffLocations = mapLocations(data.dropOffLocations, 'dropbox');
+  let pollingLocations = mapLocations(data.pollingLocations, 'polling');
+  let earlyVoteSites = mapLocations(data.earlyVoteSites, 'early');
+  let dropOffLocations = mapLocations(data.dropOffLocations, 'dropbox');
+
+  // Civic API returned a response but no locations — fall back to nearby places
+  if (!pollingLocations.length && !earlyVoteSites.length && !dropOffLocations.length) {
+    const nearby = await findNearbyVotingPlaces(address, apiKey);
+    pollingLocations = nearby;
+  }
 
   const stateInfo = data.state?.[0];
 

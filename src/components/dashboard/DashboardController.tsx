@@ -2,10 +2,11 @@
 
 import { useState, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import type { VoterInfo, GeocodeResult, VotingLocation } from '@/lib/types';
+import type { VoterInfo, GeocodeResult, VotingLocation, ElectionsData } from '@/lib/types';
 import AddressInput from '@/components/dashboard/AddressInput';
 import PollingCard from '@/components/dashboard/PollingCard';
 import InfoPanel from '@/components/dashboard/InfoPanel';
+import BallotSection from '@/components/dashboard/BallotSection';
 import type { MapSectionProps } from '@/components/dashboard/MapSection';
 
 // Leaflet accesses the DOM at module load time — must be excluded from SSR
@@ -40,6 +41,7 @@ async function fillMissingCoords(locations: VotingLocation[]): Promise<VotingLoc
 export default function DashboardController() {
   const [voterInfo, setVoterInfo] = useState<VoterInfo | null>(null);
   const [geocodeResult, setGeocodeResult] = useState<GeocodeResult | null>(null);
+  const [electionsData, setElectionsData] = useState<ElectionsData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeLocationId, setActiveLocationId] = useState<string | null>(null);
 
@@ -54,6 +56,7 @@ export default function DashboardController() {
 
     setVoterInfo(info);
     setGeocodeResult(geo);
+    setElectionsData(null);
     setActiveLocationId(null);
     setFlyToTarget(null);
 
@@ -65,28 +68,67 @@ export default function DashboardController() {
     const needsGeocoding = allLocations.some(
       (loc) => loc.lat === undefined || loc.lng === undefined
     );
-    if (!needsGeocoding) return;
 
-    const [filledPolling, filledEarly, filledDropbox] = await Promise.all([
-      fillMissingCoords(info.pollingLocations),
-      fillMissingCoords(info.earlyVoteSites),
-      fillMissingCoords(info.dropOffLocations),
-    ]);
+    // Fetch elections and geocode missing coords in parallel
+    const electionsPromise = geo.state
+      ? fetch('/api/elections', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: geo.formattedAddress, state: geo.state }),
+        })
+          .then(async (r) => {
+            if (!r.ok) {
+              const err = await r.json().catch(() => ({}));
+              console.error('[elections] API error', r.status, err);
+              return null;
+            }
+            return r.json();
+          })
+          .catch((e) => { console.error('[elections] fetch failed', e); return null; })
+      : Promise.resolve(null);
 
-    // Bail out if a newer search has superseded this one
+    const geocodePromise = needsGeocoding
+      ? Promise.all([
+          fillMissingCoords(info.pollingLocations),
+          fillMissingCoords(info.earlyVoteSites),
+          fillMissingCoords(info.dropOffLocations),
+        ])
+      : Promise.resolve(null);
+
+    const [electionsResult, filledCoords] = await Promise.all([electionsPromise, geocodePromise]);
+
+    console.log('[elections] result:', electionsResult);
+
     if (searchGenerationRef.current !== generation) return;
 
-    setVoterInfo({
-      ...info,
-      pollingLocations: filledPolling,
-      earlyVoteSites: filledEarly,
-      dropOffLocations: filledDropbox,
-    });
+    // Always set elections data — use API result or fall back to a minimal object with just external links
+    const stateCode = geo.state ?? 'US';
+    const fallbackElections = {
+      upcoming: [],
+      ballotpediaUrl: `https://ballotpedia.org/Elections_in_${stateCode},_${new Date().getFullYear()}`,
+      stateElectionUrl: undefined,
+      stateName: geo.stateName,
+    };
+    setElectionsData(electionsResult
+      ? { ...electionsResult, stateName: geo.stateName }
+      : fallbackElections
+    );
+
+    if (filledCoords) {
+      const [filledPolling, filledEarly, filledDropbox] = filledCoords;
+      setVoterInfo({
+        ...info,
+        pollingLocations: filledPolling,
+        earlyVoteSites: filledEarly,
+        dropOffLocations: filledDropbox,
+      });
+    }
   }, []);
 
   const handleClear = useCallback(() => {
     setVoterInfo(null);
     setGeocodeResult(null);
+    setElectionsData(null);
     setActiveLocationId(null);
     setFlyToTarget(null);
   }, []);
@@ -208,6 +250,11 @@ export default function DashboardController() {
                   />
                 )}
               </>
+            )}
+
+            {/* Ballot / Elections */}
+            {electionsData && (
+              <BallotSection electionsData={electionsData} stateName={geocodeResult?.stateName} />
             )}
 
             {/* Info Panel */}

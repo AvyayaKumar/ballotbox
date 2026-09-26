@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Navbar from "@/components/layout/Navbar";
+import NavbarServer from "@/components/layout/NavbarServer";
+import { SessionProvider } from 'next-auth/react';
 import Footer from "@/components/layout/Footer";
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -26,8 +27,10 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        <Navbar />
-        <main id="main-content">{children}</main>
+        <NavbarServer />
+        <SessionProvider>
+          <main id="main-content">{children}</main>
+          </SessionProvider>
         <Footer />
       </body>
     </html>
