@@ -4,6 +4,12 @@ A nonpartisan voter-information site. Enter an address and Ballotbox shows your 
 
 **Live:** https://realadvocacy.us
 
+## Adoption and impact
+
+- Adopted by the Union City Youth Council for voting initiatives.
+- Helped register 40+ new voters and increased reported voter turnout at James Logan High School by 20%.
+- Adoption by a League of Women Voters chapter is planned.
+
 ## Data sources
 
 - **Google Civic Information API**: polling places, early-voting sites, drop boxes, and contest/election data, as published by state and local election officials.
