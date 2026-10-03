@@ -81,6 +81,8 @@ export const AddressInput: React.FC<AddressInputProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteServiceRef = useRef<google.maps.places.AutocompleteService | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Bumped on submit/clear so a late autocomplete response cannot reopen the dropdown.
+  const predictionRequestRef = useRef(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -109,9 +111,11 @@ export const AddressInput: React.FC<AddressInputProps> = ({
       setPredictions([]);
       return;
     }
+    const requestId = ++predictionRequestRef.current;
     autocompleteServiceRef.current.getPlacePredictions(
       { input: value, types: ['address'], componentRestrictions: { country: 'us' } },
       (preds, status) => {
+        if (requestId !== predictionRequestRef.current) return; // superseded or submitted
         if (status === google.maps.places.PlacesServiceStatus.OK && preds) {
           setPredictions(preds.map((p) => ({ description: p.description, place_id: p.place_id })));
           setShowSuggestions(true);
@@ -131,6 +135,8 @@ export const AddressInput: React.FC<AddressInputProps> = ({
   };
 
   const selectPrediction = useCallback((pred: Prediction) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    predictionRequestRef.current++;
     setAddress(pred.description);
     setPredictions([]);
     setShowSuggestions(false);
@@ -164,6 +170,7 @@ export const AddressInput: React.FC<AddressInputProps> = ({
     setError(null);
     setIsLoading(true);
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    predictionRequestRef.current++;
     setPredictions([]);
     setShowSuggestions(false);
 
@@ -204,6 +211,7 @@ export const AddressInput: React.FC<AddressInputProps> = ({
     setIsLoading(true);
     setError(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    predictionRequestRef.current++;
     setPredictions([]);
     setShowSuggestions(false);
     navigator.geolocation.getCurrentPosition(
@@ -236,6 +244,8 @@ export const AddressInput: React.FC<AddressInputProps> = ({
   };
 
   const handleClear = () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    predictionRequestRef.current++;
     setAddress('');
     setResolvedGeocode(null);
     setPredictions([]);
