@@ -1,6 +1,6 @@
 # Ballotbox (Real Advocacy)
 
-A nonpartisan voter-information site. Enter an address and Ballotbox shows your assigned polling place, early-voting sites, and ballot drop boxes on a map, along with step-by-step voting guides and links to official resources for registration, sample ballots, and local election information.
+A nonpartisan voter-information site. Enter an address and Ballotbox shows every election currently scheduled for it, from local school board to U.S. Senate, with where to vote in each one (Election Day polling place, early-voting sites, ballot drop boxes, on a map), every contest on the ballot, the election offices that run it, and links to learn about the candidates and measures.
 
 **Live:** https://realadvocacy.us
 
@@ -12,12 +12,16 @@ A nonpartisan voter-information site. Enter an address and Ballotbox shows your 
 
 ## Data sources
 
-- **Google Civic Information API**: polling places, early-voting sites, drop boxes, and contest/election data, as published by state and local election officials.
+Ballotbox shows only data published by a government body, loaded live at the moment a user searches. Nothing election-related is stored.
+
+- **Voting Information Project via the Google Civic Information API** (`officialOnly=true`): the list of elections officials currently publish, and for each one the voter's polling places, early-voting sites, drop boxes, ballot contests (with candidate names, parties, and official candidate URLs when published), mail-only status, and state and local election-office contacts. One request per election, fanned out server-side in `src/lib/elections-api.ts`.
+- **Vote.gov (U.S. General Services Administration)**: each state and territory's official election website and registration lookup, generated into `src/lib/state-links.generated.ts` from vote.gov's public `states.json`. Refresh with `npm run links:refresh`.
 - **Google Maps Geocoding and Places APIs**: turn the address you type into coordinates and power address autocomplete.
 - **OpenStreetMap**: map tiles, rendered with Leaflet.
-- Curated state election-office links and a small set of upcoming California (Bay Area) elections in `src/lib/`.
 
-Ballotbox doesn't generate or guess voting data. If the Civic API has nothing for an address, the site says no polling locations were found instead of guessing.
+To keep responses small, voting locations are sorted by distance from the address and capped at the nearest 25 per type; the official location finder is linked for the full list (Denver publishes 450+ drop boxes). When officials have not yet published data for an address, which is normal more than a few weeks before an election, Ballotbox says so and links to the official state tools instead of guessing.
+
+"Learn more" links point first to official sources (state election website, registration and sample-ballot lookup, official candidate sites), then to clearly labeled nonpartisan guides (Ballotpedia, Vote411 from the League of Women Voters).
 
 ## Stack
 
