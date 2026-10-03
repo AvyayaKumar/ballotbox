@@ -159,17 +159,21 @@ export default function ElectionInfoPage() {
           </h2>
           <div className="flex flex-col gap-6 text-gray-600 text-lg leading-relaxed max-w-3xl">
             <p>
-              Ballotbox retrieves voting location data from the{' '}
+              Ballotbox reads election dates, ballot contests, and voting
+              locations from the{' '}
               <strong className="text-gray-900 font-semibold">
-                Google Civic Information API
-              </strong>
-              , which aggregates official election data submitted by state and
-              local election administrators across the United States.
+                Voting Information Project
+              </strong>{' '}
+              through the Google Civic Information API, requesting official
+              sources only. That data is submitted by state and local election
+              officials across the United States.
             </p>
             <p>
-              This data is updated by election officials and reflects the most
-              recently submitted information. However, polling places, hours,
-              and procedures can change — especially close to an election.
+              Everything is fetched live when you search and nothing is stored.
+              If officials have not published data for your address yet, Ballotbox
+              says so and links to your state&apos;s official election website
+              (from vote.gov) instead of guessing. Polling places, hours, and
+              procedures can still change close to an election.
             </p>
             <p className="font-medium text-gray-800">
               Always verify your voting location, hours, and requirements with

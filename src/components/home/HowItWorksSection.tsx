@@ -2,9 +2,9 @@
 import { useFadeInOnScroll } from '@/hooks/useFadeInOnScroll';
 
 const steps = [
-  { step: '1', title: 'Enter Your Address', desc: 'Type your home address or use your current location.' },
-  { step: '2', title: 'Find Your Location', desc: 'We look up your assigned polling place, early voting sites, and drop boxes.' },
-  { step: '3', title: 'Go Vote', desc: 'Get directions, check hours, and head to your polling place.' },
+  { step: '1', title: 'Enter your address', desc: 'Type your registered address or use your current location. Nothing you enter is stored.' },
+  { step: '2', title: 'See every election', desc: 'We ask election officials, live, for each election scheduled for your address: the date, every contest on your ballot, and where you can vote in it.' },
+  { step: '3', title: 'Research, then vote', desc: 'Follow official and nonpartisan links to learn about the candidates and measures, then get directions and hours.' },
 ];
 
 function AnimatedStep({ step, title, desc, delay }: { step: string; title: string; desc: string; delay: number }) {

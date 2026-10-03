@@ -1,264 +1,120 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import dynamic from 'next/dynamic';
-import type { VoterInfo, GeocodeResult, VotingLocation, ElectionsData } from '@/lib/types';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { ShieldCheck, RefreshCw } from 'lucide-react';
+import type { ElectionsResponse, GeocodeResult } from '@/lib/types';
 import AddressInput from '@/components/dashboard/AddressInput';
-import PollingCard from '@/components/dashboard/PollingCard';
+import { ElectionCard } from '@/components/dashboard/ElectionCard';
+import { LinkList } from '@/components/dashboard/LinkList';
 import InfoPanel from '@/components/dashboard/InfoPanel';
-import BallotSection from '@/components/dashboard/BallotSection';
-import type { MapSectionProps } from '@/components/dashboard/MapSection';
+import { cn } from '@/lib/utils';
 
-// Leaflet accesses the DOM at module load time — must be excluded from SSR
-const MapSection = dynamic<MapSectionProps>(
-  () => import('@/components/dashboard/MapSection').then((m) => m.MapSection),
-  { ssr: false }
-);
-
-// Geocode locations that are missing lat/lng using the server-side /api/geocode route.
-// Uses Promise.allSettled so one failure does not abort the others.
-async function fillMissingCoords(locations: VotingLocation[]): Promise<VotingLocation[]> {
-  const results = await Promise.allSettled(
-    locations.map(async (loc) => {
-      if (loc.lat !== undefined && loc.lng !== undefined) return loc;
-      try {
-        const res = await fetch('/api/geocode', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ address: loc.address }),
-        });
-        if (!res.ok) return loc;
-        const geo = (await res.json()) as GeocodeResult;
-        return { ...loc, lat: geo.lat, lng: geo.lng };
-      } catch {
-        return loc;
-      }
-    })
-  );
-  return results.map((r, i) => (r.status === 'fulfilled' ? r.value : locations[i]));
+function formatFetchedAt(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
 export default function DashboardController() {
-  const [voterInfo, setVoterInfo] = useState<VoterInfo | null>(null);
-  const [geocodeResult, setGeocodeResult] = useState<GeocodeResult | null>(null);
-  const [electionsData, setElectionsData] = useState<ElectionsData | null>(null);
+  const [data, setData] = useState<ElectionsResponse | null>(null);
+  const [geocode, setGeocode] = useState<GeocodeResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeLocationId, setActiveLocationId] = useState<string | null>(null);
+  const resultsRef = useRef<HTMLElement>(null);
 
-  // flyToTarget MUST be declared before handleFlyTo to avoid temporal dead zone ReferenceError.
-  const [flyToTarget, setFlyToTarget] = useState<{ lat: number; lng: number } | null>(null);
+  // Bring the results into view once they arrive; the hero otherwise fills the first screen.
+  useEffect(() => {
+    if (data) resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [data]);
 
-  const searchGenerationRef = useRef(0);
-
-  const handleResults = useCallback(async (info: VoterInfo, geo: GeocodeResult) => {
-    // Increment generation so any in-flight async tail from a previous search can detect staleness
-    const generation = ++searchGenerationRef.current;
-
-    setVoterInfo(info);
-    setGeocodeResult(geo);
-    setElectionsData(null);
-    setActiveLocationId(null);
-    setFlyToTarget(null);
-
-    const allLocations = [
-      ...info.pollingLocations,
-      ...info.earlyVoteSites,
-      ...info.dropOffLocations,
-    ];
-    const needsGeocoding = allLocations.some(
-      (loc) => loc.lat === undefined || loc.lng === undefined
-    );
-
-    // Fetch elections and geocode missing coords in parallel
-    const electionsPromise = geo.state
-      ? fetch('/api/elections', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ address: geo.formattedAddress, state: geo.state }),
-        })
-          .then(async (r) => {
-            if (!r.ok) {
-              const err = await r.json().catch(() => ({}));
-              console.error('[elections] API error', r.status, err);
-              return null;
-            }
-            return r.json();
-          })
-          .catch((e) => { console.error('[elections] fetch failed', e); return null; })
-      : Promise.resolve(null);
-
-    const geocodePromise = needsGeocoding
-      ? Promise.all([
-          fillMissingCoords(info.pollingLocations),
-          fillMissingCoords(info.earlyVoteSites),
-          fillMissingCoords(info.dropOffLocations),
-        ])
-      : Promise.resolve(null);
-
-    const [electionsResult, filledCoords] = await Promise.all([electionsPromise, geocodePromise]);
-
-    console.log('[elections] result:', electionsResult);
-
-    if (searchGenerationRef.current !== generation) return;
-
-    // Always set elections data — use API result or fall back to a minimal object with just external links
-    const stateCode = geo.state ?? 'US';
-    const fallbackElections = {
-      upcoming: [],
-      ballotpediaUrl: `https://ballotpedia.org/Elections_in_${stateCode},_${new Date().getFullYear()}`,
-      stateElectionUrl: undefined,
-      stateName: geo.stateName,
-    };
-    setElectionsData(electionsResult
-      ? { ...electionsResult, stateName: geo.stateName }
-      : fallbackElections
-    );
-
-    if (filledCoords) {
-      const [filledPolling, filledEarly, filledDropbox] = filledCoords;
-      setVoterInfo({
-        ...info,
-        pollingLocations: filledPolling,
-        earlyVoteSites: filledEarly,
-        dropOffLocations: filledDropbox,
-      });
-    }
+  const handleResults = useCallback((elections: ElectionsResponse, geo: GeocodeResult) => {
+    setData(elections);
+    setGeocode(geo);
   }, []);
 
   const handleClear = useCallback(() => {
-    setVoterInfo(null);
-    setGeocodeResult(null);
-    setElectionsData(null);
-    setActiveLocationId(null);
-    setFlyToTarget(null);
+    setData(null);
+    setGeocode(null);
   }, []);
 
-  const handleFlyTo = useCallback((locationId: string, lat: number, lng: number) => {
-    setActiveLocationId(locationId);
-    setFlyToTarget({ lat, lng });
-  }, []);
-
-  const hasAnyLocations = voterInfo && (
-    voterInfo.pollingLocations.length > 0 ||
-    voterInfo.earlyVoteSites.length > 0 ||
-    voterInfo.dropOffLocations.length > 0
-  );
-
-  const allLocations = voterInfo
-    ? [...voterInfo.pollingLocations, ...voterInfo.earlyVoteSites, ...voterInfo.dropOffLocations]
-    : [];
+  const count = data?.elections.length ?? 0;
+  const shownAddress = data?.normalizedAddress ?? geocode?.formattedAddress ?? data?.address;
+  const firstWithState = data?.elections.find((e) => e.state);
 
   return (
     <>
-      {/* Address Input */}
-      <AddressInput
-        onResults={handleResults}
-        onClear={handleClear}
-        isLoading={isLoading}
-        setIsLoading={setIsLoading}
-      />
+      {/* Hero + search */}
+      <section className={cn('bg-brand-dark flex flex-col justify-center', data ? 'py-8' : 'min-h-screen')}>
+        <div className="max-w-3xl mx-auto px-6 py-24 w-full">
+          <p className="text-xs font-semibold uppercase tracking-widest text-brand-muted mb-4">Nonpartisan · Official data only</p>
+          <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
+            Every election on your ballot. Where to vote in each.
+          </h1>
+          <p className="text-xl text-brand-muted mb-10 max-w-xl">
+            Enter your address. Ballotbox checks with election officials, live, for every election currently scheduled
+            for you, from local school board to U.S. Senate, and shows your polling places, early voting sites, drop
+            boxes, and what&apos;s on your ballot.
+          </p>
+          <AddressInput onResults={handleResults} onClear={handleClear} isLoading={isLoading} setIsLoading={setIsLoading} />
+        </div>
+      </section>
 
-      {/* Results Section */}
-      {voterInfo !== null && (
-        <section className="bg-brand-light py-16">
+      {data && geocode && (
+        <section ref={resultsRef} className="bg-brand-light py-16 scroll-mt-16" aria-live="polite">
           <div className="max-w-3xl mx-auto px-6 space-y-8">
-            {!hasAnyLocations ? (
-              <div className="text-center py-12">
-                <p className="text-gray-600 text-lg">No polling locations found for this address.</p>
-                <p className="text-gray-500 text-sm mt-2">
-                  Try a different address or visit{' '}
-                  <a href="https://vote.gov" className="text-brand-accent underline" target="_blank" rel="noopener noreferrer">
-                    vote.gov
-                  </a>{' '}
-                  for more information.
+            {/* Summary */}
+            <header>
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">Your elections</p>
+              <h2 className="mt-1 text-3xl font-bold text-gray-900">
+                {count === 0 ? 'No elections published yet' : `${count} election${count === 1 ? '' : 's'} on your calendar`}
+              </h2>
+              {shownAddress && <p className="mt-1 text-gray-600">{shownAddress}</p>}
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+                <span className="inline-flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4 text-green-600" aria-hidden="true" />
+                  {data.source.name}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                  Loaded live at {formatFetchedAt(data.fetchedAt)}; nothing is stored
+                </span>
+              </div>
+            </header>
+
+            {count === 0 ? (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
+                <p className="text-gray-700 leading-relaxed">
+                  Election officials have not published any upcoming election for this address through the Voting Information
+                  Project yet. That usually means no election is scheduled soon, or officials haven&apos;t loaded their data; local
+                  and special elections often appear only a few weeks out. The official sources below are always current.
                 </p>
+                <LinkList links={[...data.learnMore.filter((l) => l.official), ...data.nationalLinks]} />
               </div>
             ) : (
-              <>
-                {/* Polling locations */}
-                {voterInfo.pollingLocations.length > 0 && (
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                      Your Polling Place
-                      {voterInfo.pollingLocations.length > 1 && (
-                        <span className="text-sm font-normal text-gray-500 ml-2">
-                          ({voterInfo.pollingLocations.length} locations)
-                        </span>
-                      )}
-                    </h2>
-                    {voterInfo.pollingLocations.map((loc) => (
-                      <PollingCard
-                        key={loc.id}
-                        location={loc}
-                        onFlyTo={
-                          loc.lat !== undefined && loc.lng !== undefined
-                            ? () => handleFlyTo(loc.id, loc.lat!, loc.lng!)
-                            : undefined
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* Early vote sites */}
-                {voterInfo.earlyVoteSites.length > 0 && (
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">Early Voting Sites</h2>
-                    {voterInfo.earlyVoteSites.map((loc) => (
-                      <PollingCard
-                        key={loc.id}
-                        location={loc}
-                        onFlyTo={
-                          loc.lat !== undefined && loc.lng !== undefined
-                            ? () => handleFlyTo(loc.id, loc.lat!, loc.lng!)
-                            : undefined
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* Drop-off locations */}
-                {voterInfo.dropOffLocations.length > 0 && (
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">Ballot Drop Boxes</h2>
-                    {voterInfo.dropOffLocations.map((loc) => (
-                      <PollingCard
-                        key={loc.id}
-                        location={loc}
-                        onFlyTo={
-                          loc.lat !== undefined && loc.lng !== undefined
-                            ? () => handleFlyTo(loc.id, loc.lat!, loc.lng!)
-                            : undefined
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* Map */}
-                {geocodeResult && (
-                  <MapSection
-                    center={{ lat: geocodeResult.lat, lng: geocodeResult.lng }}
-                    flyToTarget={flyToTarget}
-                    pollingLocations={voterInfo.pollingLocations}
-                    earlyVoteSites={voterInfo.earlyVoteSites}
-                    dropOffLocations={voterInfo.dropOffLocations}
-                    activeLocationId={activeLocationId}
-                    onActiveLocationChange={setActiveLocationId}
-                    allLocations={allLocations}
+              <div className="space-y-6">
+                {data.elections.map((e, i) => (
+                  <ElectionCard
+                    key={`${data.fetchedAt}-${e.id}`}
+                    election={e}
+                    center={{ lat: geocode.lat, lng: geocode.lng }}
+                    stateLinks={data.stateLinks}
+                    learnMore={data.learnMore}
+                    defaultOpen={i === 0}
                   />
-                )}
-              </>
+                ))}
+              </div>
             )}
 
-            {/* Ballot / Elections */}
-            {electionsData && (
-              <BallotSection electionsData={electionsData} stateName={geocodeResult?.stateName} />
-            )}
+            {/* General guidance */}
+            <div>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Before you go</h3>
+              <InfoPanel state={firstWithState?.state} stateLinks={data.stateLinks} />
+            </div>
 
-            {/* Info Panel */}
-            <InfoPanel state={voterInfo.state} />
+            {count > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-widest text-gray-500 mb-3">National resources</h3>
+                <LinkList links={data.nationalLinks} compact />
+              </div>
+            )}
           </div>
         </section>
       )}

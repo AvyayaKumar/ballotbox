@@ -2,167 +2,81 @@
 
 import * as React from 'react';
 import { Accordion } from '@/components/ui/Accordion';
-import type { VoterInfo } from '@/lib/types';
+import type { Jurisdiction, StateLinks } from '@/lib/types';
 
 export interface InfoPanelProps {
-  state?: VoterInfo['state'];
+  state?: Jurisdiction;
+  stateLinks?: StateLinks;
 }
 
-const safeUrl = (url: string | undefined): string | undefined =>
-  url?.startsWith('https://') ? url : undefined;
+/** General voting guidance that applies regardless of election, pointed at the voter's official state resources. */
+export const InfoPanel: React.FC<InfoPanelProps> = ({ state, stateLinks }) => {
+  const infoUrl = state?.body?.electionInfoUrl ?? stateLinks?.electionWebsite;
+  const absenteeUrl = state?.body?.absenteeVotingInfoUrl;
+  const stateName = state?.name ?? stateLinks?.name ?? 'your state';
 
-export const InfoPanel: React.FC<InfoPanelProps> = ({ state }) => {
-  const eab = state?.electionAdministrationBody;
-
-  const correspondenceAddr = eab?.correspondenceAddress;
-  const physicalAddr = eab?.physicalAddress;
-
-  const formatAddress = (
-    addr: { locationName?: string; line1?: string; city?: string; state?: string; zip?: string } | undefined
-  ): string | null => {
-    if (!addr) return null;
-    const parts = [addr.locationName, addr.line1, addr.city, addr.state, addr.zip].filter(Boolean);
-    return parts.length > 0 ? parts.join(', ') : null;
-  };
+  const officialLink = (href: string | undefined, label: string) =>
+    href ? (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">
+        {label}
+      </a>
+    ) : null;
 
   return (
     <div className="space-y-3">
-      {/* 1. ID Requirements */}
-      <Accordion title="ID Requirements — What ID do you need to vote?">
+      <Accordion title="ID requirements: what to bring">
         <div className="space-y-2 text-sm leading-relaxed">
-          <p>
-            ID requirements vary by state. Common accepted forms include:
-          </p>
+          <p>ID rules are set by each state. Commonly accepted documents include:</p>
           <ul className="list-disc list-inside space-y-1">
             <li>Driver&apos;s license or state-issued ID</li>
-            <li>U.S. passport</li>
-            <li>Military ID</li>
-            <li>Utility bill, bank statement, or government document showing name and address</li>
+            <li>U.S. passport or military ID</li>
+            <li>A utility bill, bank statement, or government document showing your name and address (some states)</li>
           </ul>
           <p className="text-yellow-400/80">
-            Note: Requirements differ by state. Check your local election authority for the most accurate information.
+            Confirm the exact rules for {stateName} on the {officialLink(infoUrl, 'official election website') ?? 'official election website'}.
           </p>
         </div>
       </Accordion>
 
-      {/* 2. Key Dates */}
-      <Accordion title="Key Dates — Important deadlines">
+      <Accordion title="Key deadlines">
         <div className="space-y-2 text-sm leading-relaxed">
-          {safeUrl(state?.electionAdministrationBody?.electionInfoUrl) ? (
-            <p>
-              For upcoming election dates and deadlines, visit your state&apos;s official election information page:&nbsp;
-              <a
-                href={safeUrl(state?.electionAdministrationBody?.electionInfoUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 underline hover:text-blue-300"
-              >
-                {state?.electionAdministrationBody?.electionInfoUrl}
-              </a>
-            </p>
-          ) : (
-            <p>Contact your local election office for upcoming election dates and registration deadlines.</p>
-          )}
+          <p>
+            Registration, mail-ballot request, and return deadlines differ by state and election.
+            {infoUrl && <> The authoritative calendar is the {officialLink(infoUrl, `${stateName} election website`)}.</>}
+            {absenteeUrl && <> Mail and absentee rules: {officialLink(absenteeUrl, 'absentee voting information')}.</>}
+          </p>
           <ul className="list-disc list-inside space-y-1">
-            <li>Voter registration deadline (varies by state — typically 15–30 days before election)</li>
-            <li>Early voting period (if applicable)</li>
-            <li>Mail-in ballot request deadline</li>
-            <li>Election Day</li>
+            <li>Voter registration deadline (often 15 to 30 days before Election Day; some states allow same-day registration)</li>
+            <li>Early voting period, where offered</li>
+            <li>Mail-ballot request deadline and return deadline (postmarked vs. received varies)</li>
+            <li>Election Day poll hours</li>
           </ul>
         </div>
       </Accordion>
 
-      {/* 3. Accessibility */}
-      <Accordion title="Accessibility — Accessible voting options">
+      <Accordion title="Accessibility">
         <div className="space-y-2 text-sm leading-relaxed">
-          <p>All polling places are required by federal law to be physically accessible to voters with disabilities. Available options may include:</p>
+          <p>Federal law requires polling places to be accessible to voters with disabilities. Options usually include:</p>
           <ul className="list-disc list-inside space-y-1">
-            <li>Accessible parking and ramps</li>
-            <li>Curbside voting — a poll worker will bring a ballot to your car if you cannot enter the building</li>
+            <li>Accessible parking, entrances, and voting booths</li>
+            <li>Curbside voting if you cannot enter the building</li>
             <li>Accessible voting machines with audio and large-print options</li>
-            <li>Assistance from a person of your choice (with some exceptions)</li>
-            <li>Absentee / mail-in voting as an alternative</li>
+            <li>Help from a person of your choice (except your employer or union representative)</li>
+            <li>Voting by mail as an alternative</li>
           </ul>
-          <p>Contact your polling place in advance to confirm specific accommodations.</p>
+          <p>Contact your local election office in advance to arrange specific accommodations.</p>
         </div>
       </Accordion>
 
-      {/* 4. Transit & Parking */}
-      <Accordion title="Transit & Parking — Getting to your polling place">
+      <Accordion title="Getting there">
         <div className="space-y-2 text-sm leading-relaxed">
           <ul className="list-disc list-inside space-y-1">
-            <li>Many transit agencies offer free or discounted rides on Election Day — check with your local provider</li>
-            <li>Rideshare programs (Lyft, Uber) sometimes offer Election Day discounts</li>
-            <li>Street parking near polling places is often unrestricted on Election Day</li>
-            <li>Plan for potential lines — allow extra travel time during peak hours (morning and evening)</li>
-            <li>If you move while in line before polls close, you are entitled to vote</li>
+            <li>Many transit agencies offer free or discounted rides on Election Day; check your local provider</li>
+            <li>Lines are shortest mid-morning and mid-afternoon</li>
+            <li>If you are in line when polls close, you have the right to vote</li>
+            <li>Election Day voters must use their assigned polling place; early voting sites and drop boxes usually accept any voter in the county</li>
           </ul>
         </div>
-      </Accordion>
-
-      {/* 5. Election Office Contact */}
-      <Accordion title="Election Office Contact">
-        {eab ? (
-          <div className="space-y-3 text-sm leading-relaxed">
-            {eab.name && (
-              <p className="text-white font-medium">{eab.name}</p>
-            )}
-            {formatAddress(physicalAddr) && (
-              <div>
-                <p className="text-white/60 text-xs uppercase tracking-wide mb-1">Physical Address</p>
-                <p>{formatAddress(physicalAddr)}</p>
-              </div>
-            )}
-            {formatAddress(correspondenceAddr) && formatAddress(correspondenceAddr) !== formatAddress(physicalAddr) && (
-              <div>
-                <p className="text-white/60 text-xs uppercase tracking-wide mb-1">Mailing Address</p>
-                <p>{formatAddress(correspondenceAddr)}</p>
-              </div>
-            )}
-            {safeUrl(eab.electionInfoUrl) && (
-              <a
-                href={safeUrl(eab.electionInfoUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block text-blue-400 underline hover:text-blue-300"
-              >
-                Election Information
-              </a>
-            )}
-            {safeUrl(eab.votingLocationFinderUrl) && (
-              <a
-                href={safeUrl(eab.votingLocationFinderUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block text-blue-400 underline hover:text-blue-300 ml-4"
-              >
-                Find Voting Locations
-              </a>
-            )}
-            {safeUrl(eab.ballotInfoUrl) && (
-              <a
-                href={safeUrl(eab.ballotInfoUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block text-blue-400 underline hover:text-blue-300 ml-4"
-              >
-                Ballot Information
-              </a>
-            )}
-          </div>
-        ) : (
-          <p className="text-sm">
-            Contact your local election office for assistance. You can find your local office via{' '}
-            <a
-              href="https://www.usa.gov/election-office"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 underline hover:text-blue-300"
-            >
-              USA.gov
-            </a>.
-          </p>
-        )}
       </Accordion>
     </div>
   );

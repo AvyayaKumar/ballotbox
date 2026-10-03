@@ -5,7 +5,7 @@ export default function Footer() {
     <footer className="bg-[#1C1C1E] border-t border-white/10">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <p className="text-sm text-gray-400 text-center">
-          Ballotbox &middot; Nonpartisan voter information &middot; Data from Google Civic Information API
+          Ballotbox &middot; Nonpartisan voter information &middot; Election data published by state and local election officials (Voting Information Project) &middot; State links from vote.gov
         </p>
         <p className="mt-2 text-xs text-gray-600 text-center">
           &copy; {year} Ballotbox. All information is provided for reference only and is not a substitute for official

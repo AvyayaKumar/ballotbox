@@ -194,11 +194,11 @@ export default function HowToVotePage() {
             Know your options. Find your location.
           </h2>
           <p className="text-brand-muted text-lg mb-10 max-w-xl mx-auto">
-            Enter your address on the home page to find your assigned polling
-            place, nearby early voting sites, and drop box locations.
+            Enter your address on the home page to see every election on your
+            calendar and the official places to vote in each one.
           </p>
           <Link href="/">
-            <Button size="lg">Find Your Polling Place &rarr;</Button>
+            <Button size="lg">Find my elections &rarr;</Button>
           </Link>
         </div>
       </section>

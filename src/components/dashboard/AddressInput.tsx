@@ -4,10 +4,10 @@ import * as React from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MapPin, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import type { VoterInfo, GeocodeResult } from '@/lib/types';
+import type { ElectionsResponse, GeocodeResult } from '@/lib/types';
 
 export interface AddressInputProps {
-  onResults: (voterInfo: VoterInfo, geocode: GeocodeResult) => void;
+  onResults: (elections: ElectionsResponse, geocode: GeocodeResult) => void;
   onClear: () => void;
   isLoading: boolean;
   setIsLoading: (v: boolean) => void;
@@ -15,19 +15,26 @@ export interface AddressInputProps {
 
 type Prediction = { description: string; place_id: string };
 
+declare global {
+  interface Window {
+    __googleMapsLoaded?: boolean;
+    initGoogleMaps?: () => void;
+  }
+}
+
 function loadGoogleMaps(apiKey: string): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
-  if ((window as any).__googleMapsLoaded) return Promise.resolve();
+  if (window.__googleMapsLoaded) return Promise.resolve();
   return new Promise((resolve, reject) => {
     if (document.getElementById('gmaps-script')) {
       // already injected — wait for it
       const check = setInterval(() => {
-        if ((window as any).__googleMapsLoaded) { clearInterval(check); resolve(); }
+        if (window.__googleMapsLoaded) { clearInterval(check); resolve(); }
       }, 50);
       return;
     }
-    (window as any).initGoogleMaps = () => {
-      (window as any).__googleMapsLoaded = true;
+    window.initGoogleMaps = () => {
+      window.__googleMapsLoaded = true;
       resolve();
     };
     const script = document.createElement('script');
@@ -38,6 +45,26 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
     script.onerror = reject;
     document.head.appendChild(script);
   });
+}
+
+
+// Live lookup of every election officials currently publish for this address, plus where to vote in each.
+async function fetchElections(geocode: GeocodeResult): Promise<ElectionsResponse> {
+  const res = await fetch('/api/elections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      address: geocode.formattedAddress,
+      state: geocode.state,
+      lat: geocode.lat,
+      lng: geocode.lng,
+    }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? 'Could not load elections for this address.');
+  }
+  return (await res.json()) as ElectionsResponse;
 }
 
 export const AddressInput: React.FC<AddressInputProps> = ({
@@ -136,6 +163,8 @@ export const AddressInput: React.FC<AddressInputProps> = ({
     if (!trimmed) { setError('Please enter your address.'); return; }
     setError(null);
     setIsLoading(true);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setPredictions([]);
     setShowSuggestions(false);
 
     try {
@@ -156,17 +185,8 @@ export const AddressInput: React.FC<AddressInputProps> = ({
         geocode = (await geocodeRes.json()) as GeocodeResult;
       }
 
-      const pollingRes = await fetch('/api/polling', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: geocode.formattedAddress }),
-      });
-      if (!pollingRes.ok) {
-        const data = (await pollingRes.json()) as { error?: string };
-        throw new Error(data.error ?? 'Failed to fetch polling info.');
-      }
-      const voterInfo = (await pollingRes.json()) as VoterInfo;
-      onResults(voterInfo, geocode);
+      const elections = await fetchElections(geocode);
+      onResults(elections, geocode);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'An unexpected error occurred.';
       setError(
@@ -183,6 +203,9 @@ export const AddressInput: React.FC<AddressInputProps> = ({
     if (!navigator.geolocation) { setError('Geolocation is not supported by your browser.'); return; }
     setIsLoading(true);
     setError(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setPredictions([]);
+    setShowSuggestions(false);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
@@ -197,14 +220,8 @@ export const AddressInput: React.FC<AddressInputProps> = ({
           setAddress(geocode.formattedAddress);
           setResolvedGeocode(geocode);
 
-          const pollingRes = await fetch('/api/polling', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ address: geocode.formattedAddress }),
-          });
-          if (!pollingRes.ok) throw new Error('Failed to fetch polling info.');
-          const voterInfo = (await pollingRes.json()) as VoterInfo;
-          onResults(voterInfo, geocode);
+          const elections = await fetchElections(geocode);
+          onResults(elections, geocode);
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to get location.');
         } finally {
@@ -237,7 +254,7 @@ export const AddressInput: React.FC<AddressInputProps> = ({
             value={address}
             onChange={handleInputChange}
             onFocus={() => predictions.length > 0 && setShowSuggestions(true)}
-            placeholder="e.g. 123 Main St, San Francisco, CA 94102"
+            placeholder="Your registered address, e.g. 1800 H St, Union City, CA 94587"
             aria-label="Street address"
             aria-describedby="address-error"
             aria-invalid={!!error}
@@ -300,7 +317,7 @@ export const AddressInput: React.FC<AddressInputProps> = ({
         disabled={isLoading}
         aria-busy={isLoading}
       >
-        {isLoading ? 'Searching…' : 'Find My Polling Place'}
+        {isLoading ? 'Checking with election officials…' : 'Find my elections'}
       </Button>
 
       <p id="address-error" role="alert" aria-live="polite" className="text-red-400 text-sm mt-1 min-h-[1.25rem]">

@@ -7,6 +7,7 @@ import type { Marker as LeafletMarker } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { cn } from '@/lib/utils';
 import type { VotingLocation } from '@/lib/types';
+import { formatHoursLine, getOpenStatus, pickRelevantHours } from '@/lib/hours';
 
 export interface MapSectionProps {
   center: { lat: number; lng: number };
@@ -57,31 +58,6 @@ function createPinIcon(color: string, isActive: boolean) {
     iconAnchor: [w / 2, h],       // tip of pin aligns with coordinate
     popupAnchor: [0, -(h + 4)],   // popup opens above the pin
   });
-}
-
-function parseTime(timeStr: string): Date | null {
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!match) return null;
-  let hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-  const period = match[3].toUpperCase();
-  if (period === 'PM' && hours !== 12) hours += 12;
-  if (period === 'AM' && hours === 12) hours = 0;
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
-}
-
-function getOpenStatus(openTime: string, closeTime: string): { label: string; variant: 'success' | 'warning' | 'neutral' } {
-  const now = new Date();
-  const open = parseTime(openTime);
-  const close = parseTime(closeTime);
-  if (!open || !close) return { label: closeTime, variant: 'neutral' };
-  if (now >= open && now < close) {
-    const diffMins = Math.round((close.getTime() - now.getTime()) / 60000);
-    if (diffMins <= 60) return { label: `Closes in ${diffMins}m`, variant: 'warning' };
-    return { label: 'Open Now', variant: 'success' };
-  }
-  return { label: `Opens ${openTime}`, variant: 'neutral' };
 }
 
 // Inner component: must live inside <MapContainer> to use useMap().
@@ -138,9 +114,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
   activeLocationId,
   onActiveLocationChange,
 }) => {
-  // Prevent Leaflet from rendering during SSR (it requires window)
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  // This component is always loaded with next/dynamic({ ssr: false }), so Leaflet only ever runs in the browser.
 
   const isFlyingRef = useRef(false);
   const markerRefs = useRef<Record<string, LeafletMarker | null>>({});
@@ -212,13 +186,7 @@ export const MapSection: React.FC<MapSectionProps> = ({
           ))}
         </div>
 
-        {/* Skeleton shown during SSR / before mount */}
-        {!mounted && (
-          <div className="w-full h-full bg-gray-100 animate-pulse" />
-        )}
-
-        {mounted && (
-          <MapContainer
+        <MapContainer
             center={[center.lat, center.lng]}
             zoom={13}
             style={{ width: '100%', height: '100%' }}
@@ -240,7 +208,8 @@ export const MapSection: React.FC<MapSectionProps> = ({
             {taggedLocations.map(({ loc, layer }) => {
               if (!visibleLayers[layer] || loc.lat === undefined || loc.lng === undefined) return null;
               const isActive = loc.id === activeLocationId;
-              const firstHour = loc.hours[0];
+              const relevantHours = pickRelevantHours(loc.hours);
+              const status = getOpenStatus(relevantHours);
 
               return (
                 <Marker
@@ -268,18 +237,17 @@ export const MapSection: React.FC<MapSectionProps> = ({
                         {loc.address}
                       </p>
 
-                      {firstHour ? (() => {
-                        const status = getOpenStatus(firstHour.openTime, firstHour.closeTime);
-                        return (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                            <span style={{ fontSize: 12 }}>{firstHour.openTime} – {firstHour.closeTime}</span>
+                      {relevantHours ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 12 }}>{formatHoursLine(relevantHours)}</span>
+                          {status && (
                             <span style={{ fontSize: 11, color: 'white', backgroundColor: badgeColors[status.variant], borderRadius: 4, padding: '1px 6px' }}>
                               {status.label}
                             </span>
-                          </div>
-                        );
-                      })() : (
-                        <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 10 }}>See official site</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 10 }}>Hours: see official site</p>
                       )}
 
                       <a
@@ -296,7 +264,6 @@ export const MapSection: React.FC<MapSectionProps> = ({
               );
             })}
           </MapContainer>
-        )}
       </div>
     </>
   );

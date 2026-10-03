@@ -12,7 +12,8 @@ const mockLocations: VotingLocation[] = [
     type: 'polling',
     hours: [{ openTime: '6:00 AM', closeTime: '7:00 PM' }],
     services: ['ADA Accessible', 'Provisional Ballot', 'Curbside Voting'],
-    distance: '0.4 miles',
+    distance: '0.4 mi',
+    sources: [{ name: 'Sample data', official: false }],
   },
   {
     id: 'mock-2',
@@ -21,7 +22,8 @@ const mockLocations: VotingLocation[] = [
     type: 'early',
     hours: [{ openTime: '8:00 AM', closeTime: '5:00 PM' }],
     services: ['ADA Accessible', 'Same-Day Registration', 'Extended Hours'],
-    distance: '1.1 miles',
+    distance: '1.1 mi',
+    sources: [{ name: 'Sample data', official: false }],
   },
   {
     id: 'mock-3',
@@ -30,7 +32,8 @@ const mockLocations: VotingLocation[] = [
     type: 'dropbox',
     hours: [{ openTime: '24 hours', closeTime: '' }],
     services: ['Outdoor Drop Box', 'Secure', 'Monitored'],
-    distance: '0.8 miles',
+    distance: '0.8 mi',
+    sources: [{ name: 'Sample data', official: false }],
   },
 ];
 
@@ -65,13 +68,13 @@ export default function LocationsPage() {
             Voting Locations
           </h1>
           <p className="mt-6 text-lg md:text-xl text-brand-muted max-w-2xl leading-relaxed">
-            To find polling places, early voting sites, and drop boxes near you,
-            enter your address on the home page. We use your address to show the
-            locations that are officially assigned to your registration.
+            Enter your address on the home page to see every election currently
+            scheduled for it, and the polling places, early voting sites, and drop
+            boxes election officials have assigned to you for each one.
           </p>
           <div className="mt-10">
             <Link href="/">
-              <Button size="lg">Find Your Polling Place &rarr;</Button>
+              <Button size="lg">Find my elections &rarr;</Button>
             </Link>
           </div>
         </div>
@@ -149,11 +152,11 @@ export default function LocationsPage() {
             Ready to find your locations?
           </h2>
           <p className="text-brand-muted text-lg mb-10 max-w-xl mx-auto">
-            Enter your registered address on the home page to get your official
-            voting locations pulled directly from election officials.
+            Enter your registered address on the home page. Locations are read
+            live from election officials at the moment you search.
           </p>
           <Link href="/">
-            <Button size="lg">Find Your Polling Place &rarr;</Button>
+            <Button size="lg">Find my elections &rarr;</Button>
           </Link>
         </div>
       </section>

@@ -1,162 +1,166 @@
-import type { ElectionsData, UpcomingElection, Contest } from './types';
-import { mergeCaliforniaElections } from './california-elections';
+/**
+ * Builds the "every election at this address" response.
+ *
+ * Flow (all live, per request, nothing persisted):
+ *   1. List every election officials currently publish through VIP.
+ *   2. Keep national elections plus those for the voter's state.
+ *   3. For each, fetch the voter's official polling places, early-vote sites, drop boxes,
+ *      ballot contests, and election-office contacts.
+ *   4. Sort locations by distance and keep the nearest N per type so responses stay small;
+ *      the official location finder is linked for the full list.
+ */
+import type { ElectionBallot, ElectionScope, ElectionsResponse, LatLng, LocationType, VotingLocation } from './types';
+import { CivicApiError, VIP_TEST_ELECTION_ID, dedupeSources, getVoterInfo, listElections, type RawElection } from './civic-api';
+import { DATA_SOURCE, NATIONAL_LINKS, buildLearnMoreLinks, getStateLinks } from './official-links';
 
-const CIVIC_API_BASE = 'https://www.googleapis.com/civicinfo/v2';
-
-// Maps state abbreviations to their Secretary of State / election website
-const STATE_ELECTION_URLS: Record<string, string> = {
-  AL: 'https://www.sos.alabama.gov/alabama-votes',
-  AK: 'https://elections.alaska.gov',
-  AZ: 'https://azsos.gov/elections',
-  AR: 'https://www.sos.arkansas.gov/elections',
-  CA: 'https://www.sos.ca.gov/elections',
-  CO: 'https://www.coloradosos.gov/voter/pages/pub/home.xhtml',
-  CT: 'https://portal.ct.gov/SOTS/Election-Services/Election-Information',
-  DE: 'https://elections.delaware.gov',
-  FL: 'https://dos.fl.gov/elections',
-  GA: 'https://sos.ga.gov/page/elections-division',
-  HI: 'https://elections.hawaii.gov',
-  ID: 'https://sos.idaho.gov/elections-division',
-  IL: 'https://www.elections.il.gov',
-  IN: 'https://www.in.gov/sos/elections',
-  IA: 'https://sos.iowa.gov/elections',
-  KS: 'https://sos.ks.gov/elections',
-  KY: 'https://elect.ky.gov',
-  LA: 'https://www.sos.la.gov/ElectionsAndVoting',
-  ME: 'https://www.maine.gov/sos/cec/elec',
-  MD: 'https://elections.maryland.gov',
-  MA: 'https://www.sec.state.ma.us/ele',
-  MI: 'https://mvic.sos.state.mi.us',
-  MN: 'https://www.sos.state.mn.us/elections-voting',
-  MS: 'https://www.sos.ms.gov/elections-voting',
-  MO: 'https://www.sos.mo.gov/elections',
-  MT: 'https://sosmt.gov/elections',
-  NE: 'https://sos.nebraska.gov/elections',
-  NV: 'https://www.nvsos.gov/sos/elections',
-  NH: 'https://www.sos.nh.gov/elections',
-  NJ: 'https://www.njelections.org',
-  NM: 'https://www.sos.nm.gov/voting-and-elections',
-  NY: 'https://www.elections.ny.gov',
-  NC: 'https://www.ncsbe.gov',
-  ND: 'https://vip.sos.nd.gov',
-  OH: 'https://www.ohiosos.gov/elections',
-  OK: 'https://www.ok.gov/elections',
-  OR: 'https://sos.oregon.gov/voting',
-  PA: 'https://www.vote.pa.gov',
-  RI: 'https://vote.sos.ri.gov',
-  SC: 'https://www.scvotes.gov',
-  SD: 'https://sdsos.gov/elections-voting',
-  TN: 'https://sos.tn.gov/elections',
-  TX: 'https://www.sos.state.tx.us/elections',
-  UT: 'https://elections.utah.gov',
-  VT: 'https://sos.vermont.gov/elections',
-  VA: 'https://www.elections.virginia.gov',
-  WA: 'https://www.sos.wa.gov/elections',
-  WV: 'https://sos.wv.gov/elections',
-  WI: 'https://elections.wi.gov',
-  WY: 'https://soswy.state.wy.us/Elections',
-  DC: 'https://www.dcboe.org',
-};
-
-interface RawElection {
-  id: string;
-  name: string;
-  electionDay: string;
-  ocdDivisionId: string;
+export interface ElectionsLookupOptions {
+  /** Two-letter state code from geocoding; used to pre-filter elections. Confirmed against officials' normalized address. */
+  stateCode?: string;
+  /** Voter's coordinates, for distance sorting. */
+  origin?: LatLng;
+  /** Include the permanent VIP test election (development only). */
+  includeTestElection?: boolean;
+  /** Nearest-N cap per location type. */
+  maxLocationsPerType?: number;
 }
 
-interface RawContest {
-  type: string;
-  office?: string;
-  level?: string[];
-  referendumTitle?: string;
-  referendumSubtitle?: string;
-  referendumUrl?: string;
-  candidates?: Array<{ name: string; party?: string }>;
+const DEFAULT_MAX_LOCATIONS = 25;
+
+export function electionStateCode(ocdDivisionId: string): string | undefined {
+  const m = ocdDivisionId.match(/state:([a-z]{2})/i);
+  return m ? m[1].toUpperCase() : undefined;
 }
 
-interface RawVoterInfo {
-  contests?: RawContest[];
+export function electionScope(ocdDivisionId: string): ElectionScope {
+  if (!/state:/i.test(ocdDivisionId)) return 'national';
+  const afterState = ocdDivisionId.split(/state:[a-z]{2}/i)[1] ?? '';
+  return afterState.includes('/') ? 'local' : 'state';
 }
 
-function extractStateCode(ocdDivisionId: string): string {
-  const match = ocdDivisionId.match(/state:([a-z]{2})/);
-  return match ? match[1].toUpperCase() : 'US';
+function isRelevant(e: RawElection, stateCode: string | undefined): boolean {
+  const eState = electionStateCode(e.ocdDivisionId);
+  if (!eState) return true; // national
+  if (!stateCode) return true; // unknown state: let officials' address lookup decide
+  return eState === stateCode;
 }
 
-async function fetchContestsForElection(
-  address: string,
-  electionId: string,
-  apiKey: string
-): Promise<Contest[]> {
-  try {
-    const url = new URL(`${CIVIC_API_BASE}/voterinfo`);
-    url.searchParams.set('address', address);
-    url.searchParams.set('electionId', electionId);
-    url.searchParams.set('key', apiKey);
-
-    const res = await fetch(url.toString());
-    if (!res.ok) return [];
-
-    const data: RawVoterInfo = await res.json();
-    return (data.contests ?? []).map((c) => ({
-      type: c.type,
-      office: c.office,
-      level: c.level?.[0],
-      referendumTitle: c.referendumTitle,
-      referendumSubtitle: c.referendumSubtitle,
-      referendumUrl: c.referendumUrl,
-      candidates: c.candidates?.map((cand) => ({ name: cand.name, party: cand.party })),
-    }));
-  } catch {
-    return [];
-  }
-}
-
-export async function getElectionsData(address: string, stateCode: string): Promise<ElectionsData> {
-  const apiKey = process.env.GOOGLE_CIVIC_API_KEY;
-  if (!apiKey) throw new Error('Server configuration error');
-
-  // Fetch all known elections
-  const electionsRes = await fetch(
-    `${CIVIC_API_BASE}/elections?key=${apiKey}`
-  );
-  const electionsData = electionsRes.ok ? await electionsRes.json() : { elections: [] };
-  const allElections: RawElection[] = electionsData.elections ?? [];
-
-  // Filter to elections relevant to this state (plus national)
-  const relevant = allElections.filter((e) => {
-    const eState = extractStateCode(e.ocdDivisionId);
-    return eState === 'US' || eState === stateCode;
+function nearestN(list: VotingLocation[], n: number): VotingLocation[] {
+  const sorted = [...list].sort((a, b) => {
+    if (a.distanceMiles === undefined && b.distanceMiles === undefined) return 0;
+    if (a.distanceMiles === undefined) return 1;
+    if (b.distanceMiles === undefined) return -1;
+    return a.distanceMiles - b.distanceMiles;
   });
+  return sorted.slice(0, n);
+}
 
-  // Skip the VIP test election
-  const real = relevant.filter((e) => e.id !== '2000');
+export async function getElectionsForAddress(address: string, options: ElectionsLookupOptions = {}): Promise<ElectionsResponse> {
+  const apiKey = process.env.GOOGLE_CIVIC_API_KEY;
+  if (!apiKey) throw new Error('Server configuration error: GOOGLE_CIVIC_API_KEY is not set');
 
-  // Fetch contests for each relevant election in parallel
-  const upcoming: UpcomingElection[] = await Promise.all(
-    real.map(async (e) => {
-      const contests = await fetchContestsForElection(address, e.id, apiKey);
+  const maxPerType = options.maxLocationsPerType ?? DEFAULT_MAX_LOCATIONS;
+  const requestedState = options.stateCode?.toUpperCase();
+
+  const all = await listElections(apiKey);
+  const candidates = all
+    .filter((e) => options.includeTestElection || e.id !== VIP_TEST_ELECTION_ID)
+    .filter((e) => isRelevant(e, requestedState));
+
+  const results = await Promise.allSettled(candidates.map((e) => getVoterInfo(address, e.id, apiKey, options.origin)));
+
+  // An unparseable address fails every lookup the same way; surface it as a 400 instead of N empty elections.
+  const parseFailure = results.find(
+    (r): r is PromiseRejectedResult => r.status === 'rejected' && r.reason instanceof CivicApiError && r.reason.status === 400
+  );
+  if (parseFailure && results.every((r) => r.status === 'rejected')) throw parseFailure.reason;
+
+  let normalizedAddress: string | undefined;
+  let confirmedState: string | undefined;
+
+  const elections: ElectionBallot[] = candidates.map((e, i) => {
+    const r = results[i];
+    const scope = electionScope(e.ocdDivisionId);
+    if (r.status === 'rejected') {
+      const message = r.reason instanceof Error ? r.reason.message : 'Lookup failed';
       return {
         id: e.id,
         name: e.name,
-        date: e.electionDay,
-        stateCode: extractStateCode(e.ocdDivisionId),
-        contests,
+        electionDay: e.electionDay,
+        ocdDivisionId: e.ocdDivisionId,
+        scope,
+        mailOnly: false,
+        hasVotingData: false,
+        pollingLocations: [],
+        earlyVoteSites: [],
+        dropOffLocations: [],
+        locationTotals: { polling: 0, early: 0, dropbox: 0 },
+        contests: [],
+        sources: [],
+        error: message,
       };
+    }
+    const v = r.value;
+    normalizedAddress ??= v.normalizedAddress;
+    confirmedState ??= v.normalizedState;
+
+    const totals: Record<LocationType, number> = {
+      polling: v.pollingLocations.length,
+      early: v.earlyVoteSites.length,
+      dropbox: v.dropOffLocations.length,
+    };
+    const hasVotingData = totals.polling + totals.early + totals.dropbox > 0 || v.contests.length > 0;
+
+    const sources = dedupeSources([
+      v.state?.sources ?? [],
+      v.localJurisdiction?.sources ?? [],
+      ...v.pollingLocations.map((l) => l.sources),
+      ...v.earlyVoteSites.map((l) => l.sources),
+      ...v.dropOffLocations.map((l) => l.sources),
+      ...v.contests.map((c) => c.sources),
+    ]);
+
+    return {
+      id: e.id,
+      name: e.name,
+      electionDay: e.electionDay,
+      ocdDivisionId: e.ocdDivisionId,
+      scope,
+      mailOnly: v.mailOnly,
+      hasVotingData,
+      pollingLocations: nearestN(v.pollingLocations, maxPerType),
+      earlyVoteSites: nearestN(v.earlyVoteSites, maxPerType),
+      dropOffLocations: nearestN(v.dropOffLocations, maxPerType),
+      locationTotals: totals,
+      contests: v.contests,
+      state: v.state,
+      localJurisdiction: v.localJurisdiction,
+      sources,
+    };
+  });
+
+  // If officials normalized the address to a different state than geocoding guessed, drop other-state elections.
+  const stateCode = confirmedState ?? requestedState;
+  const filtered = elections
+    .filter((e) => {
+      const eState = electionStateCode(e.ocdDivisionId);
+      return !eState || !stateCode || eState === stateCode;
     })
-  );
+    .sort((a, b) => a.electionDay.localeCompare(b.electionDay));
 
-  // For California, merge with curated election calendar so there's always data
-  const finalUpcoming = stateCode === 'CA'
-    ? mergeCaliforniaElections(upcoming)
-    : upcoming.sort((a, b) => a.date.localeCompare(b.date));
-
-  const ballotpediaUrl = `https://ballotpedia.org/Elections_in_${stateCode},_${new Date().getFullYear()}`;
+  const stateLinks = getStateLinks(stateCode);
+  const stateName = stateLinks?.name ?? filtered.find((e) => e.state?.name)?.state?.name;
+  const year = filtered[0] ? Number(filtered[0].electionDay.slice(0, 4)) : new Date().getFullYear();
 
   return {
-    upcoming: finalUpcoming,
-    ballotpediaUrl,
-    stateElectionUrl: STATE_ELECTION_URLS[stateCode],
+    address,
+    normalizedAddress,
+    stateCode,
+    stateName,
+    elections: filtered,
+    stateLinks,
+    learnMore: buildLearnMoreLinks(stateCode, stateName, year),
+    nationalLinks: NATIONAL_LINKS,
+    fetchedAt: new Date().toISOString(),
+    source: DATA_SOURCE,
   };
 }

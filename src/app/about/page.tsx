@@ -5,9 +5,14 @@ interface DataSource {
 
 const dataSources: DataSource[] = [
   {
-    name: 'Google Civic Information API',
+    name: 'Voting Information Project (via the Google Civic Information API)',
     description:
-      'Provides official election data including polling places, early voting sites, ballot drop boxes, and contest information. This data is sourced directly from state and local election administrators and updated by election officials.',
+      'Election dates, every contest on your ballot, polling places, early voting sites, ballot drop boxes, and election-office contacts, as published by state and local election officials. Ballotbox requests official sources only and reads the data live at the moment you search; it keeps no copy.',
+  },
+  {
+    name: 'Vote.gov (U.S. General Services Administration)',
+    description:
+      'The official link to each state and territory election website and registration lookup, used when officials have not yet published data for an address.',
   },
   {
     name: 'Google Maps Geocoding API',
@@ -52,9 +57,10 @@ export default function AboutPage() {
             Access. Clarity. Democracy.
           </h2>
           <p className="text-xl text-gray-700 leading-relaxed max-w-3xl font-medium">
-            Ballotbox is a nonpartisan voter access tool designed to help every
-            eligible voter find their polling place, understand their voting
-            options, and participate in democracy with confidence.
+            Ballotbox is a nonpartisan voter access tool that shows every
+            election currently scheduled for your address, from school board to
+            U.S. Senate, where to vote in each one, and where to learn about who
+            is running.
           </p>
           <p className="mt-6 text-lg text-gray-600 leading-relaxed max-w-3xl">
             We don&apos;t endorse any candidates, parties, or political positions. Our
